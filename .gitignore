@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.data/
+*.db*
+.env*
+artifacts/
+test-results/
+playwright-report/
+*.sqlite*
+ai-credentials.json
+.DS_Store
+# Local acceptance artifacts can include the user's sidebar and document titles.
+docs/screenshots/
+docs/evidence/
+docs/ACCEPTANCE*.md
+docs/UX-REVIEW*.md
+docs/REAL-ACCEPTANCE*.md
+docs/BRIEF.md
