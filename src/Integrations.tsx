@@ -1,3 +1,4 @@
+import { KnowledgeSync } from './KnowledgeSync';
 import { useEffect, useState } from 'react';
 import { Download, Github, X, LoaderCircle, Check, ExternalLink } from 'lucide-react';
 import { api } from './api';
@@ -14,7 +15,7 @@ export function Integrations({note,onNote,beforeAction,disabled,mode,onClose}:{n
  const [github,setGithub]=useState<GithubStatus|null>(null),[repo,setRepo]=useState(()=>localStorage.getItem('yejian-github-repo')||''),[branch,setBranch]=useState(()=>localStorage.getItem('yejian-github-branch')||''),[folder,setFolder]=useState(()=>localStorage.getItem('yejian-github-folder')||'learning-notes');
  const [preview,setPreview]=useState<SyncPreview|null>(null),[result,setResult]=useState<{url:string;commitSha:string;files:number}|null>(null);
  const run=async(fn:()=>Promise<void>)=>{if(working)return;setWorking(true);setError('');try{await fn();}catch(e){setError(e instanceof Error?e.message:'操作未完成，请重试。');}finally{setWorking(false);}};
- useEffect(()=>{setError('');setResult(null);setPreview(null);setPullPreview(null);setPullResult(null);if(mode==='github')void run(async()=>setGithub(await api<GithubStatus>('/api/github/status')));},[mode]);
+ useEffect(()=>{setError('');setResult(null);setPreview(null);setPullPreview(null);setPullResult(null);if(mode==='github')void run(async()=>{setGithub(await api<GithubStatus>('/api/github/status'));const s=await api<{config:{repo:string;branch:string;folder:string}|null}>('/api/knowledge/status');if(s.config){setRepo(s.config.repo);setBranch(s.config.branch);setFolder(s.config.folder);}});},[mode]);
  const close=()=>{if(!working){onClose();setError('');}};
  useEffect(()=>{if(!mode||working)return;const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')close();};document.addEventListener('keydown',escape);return()=>document.removeEventListener('keydown',escape);},[mode,working,onClose]);
  const invalidates=()=>{setPreview(null);setResult(null);setPullPreview(null);setPullResult(null);};
@@ -34,7 +35,7 @@ export function Integrations({note,onNote,beforeAction,disabled,mode,onClose}:{n
      <button className="primary-button" disabled={working||disabled} onClick={()=>void run(async()=>{await beforeAction();const result=await api<{note:Note}>('/api/import',{previewId:imported.previewId});onNote(result.note);onClose();setImported(null);setUrl('');})}><Check size={15}/>导入为我的文档</button>
     </div>}
    </>:<>
-    <div className="theme-modes" role="group" aria-label="同步方向"><button aria-pressed={direction==='push'} className={direction==='push'?'selected':''} disabled={working} onClick={()=>{setDirection('push');invalidates();}}>上传当前文档</button><button aria-pressed={direction==='pull'} className={direction==='pull'?'selected':''} disabled={working} onClick={()=>{setDirection('pull');invalidates();}}>从 GitHub 拉取</button></div><p style={{fontSize:12,lineHeight:1.8,color:'var(--muted)',marginTop:14}}>{direction==='push'?`上传「${note?.title||'未选中文档'}」的正文与讨论。`:'预览并恢复仓库中的PaperMind笔记；两边都有修改时保留本机冲突副本。'}</p>
+    <KnowledgeSync/><div className="theme-modes" role="group" aria-label="同步方向"><button aria-pressed={direction==='push'} className={direction==='push'?'selected':''} disabled={working} onClick={()=>{setDirection('push');invalidates();}}>上传当前文档</button><button aria-pressed={direction==='pull'} className={direction==='pull'?'selected':''} disabled={working} onClick={()=>{setDirection('pull');invalidates();}}>从 GitHub 拉取</button></div><p style={{fontSize:12,lineHeight:1.8,color:'var(--muted)',marginTop:14}}>{direction==='push'?`上传「${note?.title||'未选中文档'}」的正文与讨论。`:'预览并恢复仓库中的PaperMind笔记；两边都有修改时保留本机冲突副本。'}</p>
     <div className="login-state">{github?.authenticated?`已通过本机 GitHub CLI 登录：${github.login}`:github?.message||'正在检查 GitHub 登录…'}{github&&!github.authenticated&&<p>在终端运行 <code>gh auth login</code> 后，关闭并重新打开此窗口。</p>}</div>
     <label className="field-label">目标仓库<input aria-label="GitHub 仓库" value={repo} placeholder="owner/repository" disabled={working} onChange={e=>{setRepo(e.target.value);invalidates();}}/></label>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}><label className="field-label">分支（可留空使用默认分支）<input aria-label="GitHub 分支" value={branch} placeholder="main" disabled={working} onChange={e=>{setBranch(e.target.value);invalidates();}}/></label><label className="field-label">存放目录<input aria-label="GitHub 目录" value={folder} disabled={working} onChange={e=>{setFolder(e.target.value);invalidates();}}/></label></div>

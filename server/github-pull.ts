@@ -25,7 +25,7 @@ export function createPullService(store:DocumentStore,github:GithubClient,option
   let bytes=0;
   const read=async(path:string)=>{const e=tree.tree.find(e=>e.path===path);if(!e||e.type!=='blob'||e.mode!=='100644')throw new AppError(400,`缺少普通文件：${path}`);const b=await github.request('GET',`repos/${d.repo}/git/blobs/${e.sha}`);if(b.encoding!=='base64'||!Number.isFinite(b.size)||b.size>8_000_000)throw new AppError(413,'文件过大或编码无效。');const value=Buffer.from(b.content.replace(/\n/g,''),'base64').toString('utf8');bytes+=Buffer.byteLength(value);if(bytes>8_000_000)throw new AppError(413,'本次拉取超过 8 MB，请缩小目录范围。');files[path]=e.sha;return value;};
   for(const entry of entries){
-   const prefix=entry.path.slice(0,-'/document.json'.length);const document=await read(entry.path),comments=await read(prefix+'/comments.json'),markdown=await read(prefix+'/README.md');
+   const prefix=entry.path.slice(0,-'/document.json'.length);const [document,comments,markdown]=await Promise.all([read(entry.path),read(prefix+'/comments.json'),read(prefix+'/README.md')]);
    let n:Note;try{n=decodeBundle(document,comments);}catch(e){throw new AppError(400,`远端笔记格式无效：${prefix}。${e instanceof AppError?e.message:''}`);}
    if(prefix!==`${d.folder}/${n.id}`)throw new AppError(400,'文档 ID 与文件夹不一致。');
    const warnings:string[]=[];

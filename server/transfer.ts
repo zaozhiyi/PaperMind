@@ -14,19 +14,20 @@ export function parseTextDocument(body:string,format:'markdown'|'html',title?:st
 }
 const uuid=z.string().uuid(),date=z.string().datetime({offset:true});
 const proposal=z.object({id:uuid,threadId:uuid,baseRevision:z.number().int().positive(),original:z.string().max(500000),replacementHtml:z.string().max(500000),explanation:z.string().max(30000),state:z.enum(['pending','applied','rejected','undone'])});
+const chatMessage=z.object({id:uuid,role:z.enum(['user','assistant']),text:z.string().max(200000),createdAt:date});
 const discussion=z.object({id:uuid,quote:z.string().max(500000),createdAt:date,resolved:z.boolean(),messages:z.array(z.object({id:uuid,role:z.enum(['user','assistant']),text:z.string().max(200000),createdAt:date})).max(10000),proposals:z.array(proposal).max(10000)});
 export function decodeBundle(documentText:string,commentsText:string):Note {
  const document=z.object({format:z.literal('yejian-document-v1'),id:uuid,title:z.string().max(200),revision:z.number().int().positive(),updatedAt:date,sourceUrl:z.string().url().refine(v=>/^https?:\/\//.test(v)).optional(),content:z.record(z.string(),z.unknown())}).parse(JSON.parse(documentText));
- const comments=z.object({format:z.literal('yejian-discussions-v1'),noteId:uuid,threads:z.array(discussion).max(1000)}).parse(JSON.parse(commentsText));
+ const comments=z.object({format:z.literal('yejian-discussions-v1'),noteId:uuid,threads:z.array(discussion).max(1000),documentMessages:z.array(chatMessage).max(10000).optional()}).parse(JSON.parse(commentsText));
  if(comments.noteId!==document.id)throw new AppError(400,'正文与讨论属于不同文档。');
  const content=document.content as Content;validateContent(content);
  const allIds=new Set<string>();for(const t of comments.threads){for(const id of [t.id,...t.messages.map(m=>m.id),...t.proposals.map(p=>p.id)]){if(allIds.has(id))throw new AppError(400,'远端讨论包含重复 ID。');allIds.add(id);}for(const p of t.proposals){if(p.threadId!==t.id)throw new AppError(400,'修改记录与讨论不匹配。');p.replacementHtml=cleanHTML(p.replacementHtml);}}
  const known=new Set(comments.threads.map(t=>t.id));validateContent(content).descendants(n=>{for(const m of n.marks)if(m.type.name==='annotation'&&m.attrs.threadIds.some((id:string)=>!known.has(id)))throw new AppError(400,'正文批注缺少对应的讨论文件。');});
- return {...document,content,threads:comments.threads.map(t=>({...t,detached:false}))};
+ return {...document,content,documentMessages:comments.documentMessages,threads:comments.threads.map(t=>({...t,detached:false}))};
 }
 // Ignore machine-local revision/timestamps and derived UI flags for synchronization.
 export function noteFingerprint(note:Note):string {
- return createHash('sha256').update(JSON.stringify({id:note.id,title:note.title,sourceUrl:note.sourceUrl||null,content:note.content,threads:note.threads.map(t=>({id:t.id,quote:t.quote,createdAt:t.createdAt,resolved:t.resolved,messages:t.messages,proposals:t.proposals.map(({canUndo,...p})=>p)}))})).digest('hex');
+ return createHash('sha256').update(JSON.stringify({id:note.id,title:note.title,sourceUrl:note.sourceUrl||null,content:note.content,documentMessages:note.documentMessages||[],threads:note.threads.map(t=>({id:t.id,quote:t.quote,createdAt:t.createdAt,resolved:t.resolved,messages:t.messages,proposals:t.proposals.map(({canUndo,...p})=>p)}))})).digest('hex');
 }
 export function installAgentRoutes(app:Express,store:DocumentStore) {
  store.db.exec('CREATE TABLE IF NOT EXISTS external_documents(source_key TEXT PRIMARY KEY,note_id TEXT NOT NULL REFERENCES notes(id),source_hash TEXT NOT NULL)');

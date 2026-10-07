@@ -83,6 +83,10 @@ export class DocumentStore {
       CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,thread_id TEXT NOT NULL REFERENCES threads(id),role TEXT NOT NULL,text TEXT NOT NULL,created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS proposals(id TEXT PRIMARY KEY,note_id TEXT NOT NULL REFERENCES notes(id),thread_id TEXT NOT NULL REFERENCES threads(id),base_revision INTEGER NOT NULL,original TEXT NOT NULL,replacement TEXT NOT NULL,explanation TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending');
       CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY AUTOINCREMENT,note_id TEXT NOT NULL REFERENCES notes(id),title TEXT NOT NULL,content TEXT NOT NULL,created_at TEXT NOT NULL,kind TEXT NOT NULL);`);
+    this.db.exec(`CREATE TABLE IF NOT EXISTS chats(id TEXT PRIMARY KEY,title TEXT NOT NULL,updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS chat_messages(id TEXT PRIMARY KEY,chat_id TEXT NOT NULL REFERENCES chats(id),role TEXT NOT NULL,text TEXT NOT NULL,created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS chat_notes(chat_id TEXT NOT NULL REFERENCES chats(id),note_id TEXT NOT NULL REFERENCES notes(id),PRIMARY KEY(chat_id,note_id));
+      CREATE TABLE IF NOT EXISTS document_chats(note_id TEXT PRIMARY KEY REFERENCES notes(id),chat_id TEXT UNIQUE NOT NULL REFERENCES chats(id));`);
     const columns=this.db.prepare('PRAGMA table_info(history)').all() as {name:string}[];
     if(!columns.some(c=>c.name==='proposal_id'))this.db.exec('ALTER TABLE history ADD COLUMN proposal_id TEXT');
     if(!columns.some(c=>c.name==='applied_revision'))this.db.exec('ALTER TABLE history ADD COLUMN applied_revision INTEGER');
@@ -105,7 +109,7 @@ export class DocumentStore {
     })) as Discussion[];
     const latest=this.db.prepare('SELECT kind,proposal_id,applied_revision FROM history WHERE note_id=? ORDER BY id DESC LIMIT 1').get(id) as any;
     for(const t of threads)for(const p of t.proposals)p.canUndo=p.state==='applied'&&latest?.kind==='ai'&&latest.proposal_id===p.id&&latest.applied_revision===row.revision;
-    return {id,title:row.title,content,revision:row.revision,updatedAt:row.updated_at,threads,sourceUrl:row.source_url||undefined};
+    return {id,title:row.title,content,revision:row.revision,updatedAt:row.updated_at,threads,sourceUrl:row.source_url||undefined,documentMessages:this.db.prepare('SELECT m.id,m.role,m.text,m.created_at AS createdAt FROM chat_messages m JOIN document_chats d ON d.chat_id=m.chat_id WHERE d.note_id=? ORDER BY m.rowid').all(id) as unknown as Message[]};
   }
   create(title:string,content:Content={type:'doc',content:[{type:'paragraph'}]},sourceUrl?:string):Note {
     validateContent(content);const id=randomUUID();
@@ -119,7 +123,12 @@ export class DocumentStore {
     this.db.prepare('UPDATE notes SET title=?,content=?,revision=revision+1,updated_at=? WHERE id=?').run(title.trim()||'未命名文档',JSON.stringify(content),now(),note.id);
     return this.get(note.id);
   }
-  save(id:string,revision:number,title:string,content:Content):Note { return this.tx(()=>{const n=this.get(id);this.assertRevision(n,revision);return this.write(n,title,content,'edit');}); }
+  save(id:string,revision:number,title:string,content:Content):Note { return this.tx(()=>{const n=this.get(id);this.assertRevision(n,revision);
+    // A pasted selection may carry annotation IDs from a different article.
+    // Keep its text/formatting, but never attach another article's discussions.
+    validateContent(content);const cleaned=structuredClone(content),known=new Set(n.threads.map(t=>t.id));
+    const visit=(node:Content)=>{if(node.marks)node.marks=node.marks.flatMap(m=>{if(m.type!=='annotation')return [m];const ids=(m.attrs?.threadIds||[]).filter((id:string)=>known.has(id));return ids.length?[{...m,attrs:{...m.attrs,threadIds:ids}}]:[];});node.content?.forEach(visit);};visit(cleaned);
+    return this.write(n,title,cleaned,'edit');}); }
   addThread(id:string,revision:number,from:number,to:number,quote:string):{note:Note;threadId:string} {
     return this.tx(()=> {
       const n=this.get(id);this.assertRevision(n,revision);const node=validateContent(n.content);
@@ -205,6 +214,11 @@ export class DocumentStore {
       for(const m of t.messages)this.db.prepare('INSERT INTO messages VALUES(?,?,?,?,?)').run(copy?randomUUID():m.id,tid,m.role,m.text,m.createdAt);
       // Pending edits target an old machine revision and must be regenerated.
       for(const p of t.proposals)this.db.prepare('INSERT INTO proposals VALUES(?,?,?,?,?,?,?,?)').run(copy?randomUUID():p.id,id,tid,p.state==='pending'?revision:p.baseRevision,p.original,p.replacementHtml,p.explanation,p.state==='pending'?'rejected':p.state);
+    }
+    if(remote.documentMessages!==undefined){
+      let chat=this.db.prepare('SELECT chat_id FROM document_chats WHERE note_id=?').get(id) as {chat_id:string}|undefined;
+      if(!chat&&remote.documentMessages.length){const chatId=randomUUID();this.db.prepare('INSERT INTO chats VALUES(?,?,?)').run(chatId,remote.title,now());this.db.prepare('INSERT INTO document_chats VALUES(?,?)').run(id,chatId);chat={chat_id:chatId};}
+      if(chat){this.db.prepare('DELETE FROM chat_messages WHERE chat_id=?').run(chat.chat_id);for(const m of remote.documentMessages)this.db.prepare('INSERT INTO chat_messages VALUES(?,?,?,?,?)').run(copy?randomUUID():m.id,chat.chat_id,m.role,m.text,m.createdAt);this.db.prepare('UPDATE chats SET updated_at=? WHERE id=?').run(now(),chat.chat_id);}
     }
     return this.get(id);
   }

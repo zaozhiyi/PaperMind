@@ -1,4 +1,6 @@
 import express from 'express';
+import { createKnowledgeSync, installKnowledgeRoutes, knowledgeConfig, assertPrivateOwner } from './knowledge-sync.ts';
+import { githubCLI } from './integrations.ts';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { DocumentStore, AppError, toHTML, fromHTML, threadRange, validateContent } from './documents.ts';
@@ -23,7 +25,7 @@ export async function createApp(dataDir:string, dependencies: { ai?: AIService; 
     next();
   });
   app.get('/api/session',(_req,res)=>res.json({token:sessionToken}));
-  app.get('/api/health',(_req,res)=>res.json({ok:true,app:'papermind',version:'0.3.0',pid:process.pid}));
+  app.get('/api/health',(_req,res)=>res.json({ok:true,app:'papermind',version:'0.4.0',pid:process.pid}));
   app.get('/api/notes',(_req,res)=>res.json(store.list()));
   app.post('/api/notes',(req,res)=>{
     const {title}=z.object({title:z.string().max(200).default('未命名文档')}).parse(req.body);
@@ -112,12 +114,18 @@ export async function createApp(dataDir:string, dependencies: { ai?: AIService; 
   app.post('/api/notes/:id/undo',(req,res)=>{const {revision,proposalId}=z.object({revision:z.number().int().positive(),proposalId:z.string().uuid().optional()}).parse(req.body);res.json(store.undo(req.params.id,revision,proposalId));});
   installAgentRoutes(app,store);
   installChatRoutes(app,store,ai);
-  await installIntegrationRoutes(app,store,dataDir,dependencies.integrations);
+  const github=dependencies.integrations?.github||githubCLI();
+  const integrations=await installIntegrationRoutes(app,store,dataDir,{...dependencies.integrations,github,beforePush:async(repo)=>{
+    const config=knowledgeConfig(store);
+    if(config){if(repo.toLowerCase()!==config.repo.toLowerCase())throw new AppError(403,'已绑定私有知识库，请勿将学习笔记上传到其他仓库。');await assertPrivateOwner(github,repo);}
+    await dependencies.integrations?.beforePush?.(repo);
+  }});
+  const knowledge=createKnowledgeSync(store,integrations,github);installKnowledgeRoutes(app,knowledge);
   app.use('/api',(_req,res)=>res.status(404).json({message:'接口不存在。'}));
   app.use((err:unknown,_req:express.Request,res:express.Response,_next:express.NextFunction)=>{
     if(res.headersSent){res.end();return;}
     const status=err instanceof AppError||err instanceof AIError?err.status:err instanceof z.ZodError?400:500;
     res.status(status).json({message:err instanceof z.ZodError?'输入格式不正确。':err instanceof Error?err.message:'服务暂时不可用。'});
   });
-  return {app,store,ai};
+  return {app,store,ai,knowledge};
 }

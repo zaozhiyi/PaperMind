@@ -146,7 +146,7 @@ export function githubCLI():GithubClient {
 export interface SyncFile {path:string;status:'add'|'update'|'unchanged';content:string;previousContent?:string;bytes:number}
 export interface SyncPreview {previewId:string;repo:string;branch:string;folder:string;baseSha:string;files:SyncFile[];warnings:string[]}
 export interface Registry {destinations:Record<string,{files:Record<string,string>;notes?:Record<string,string>}>}
-export interface IntegrationDependencies {fetchPage?:(url:string)=>Promise<{html:string;url:string}>;github?:GithubClient}
+export interface IntegrationDependencies {fetchPage?:(url:string)=>Promise<{html:string;url:string}>;github?:GithubClient;beforePush?:(repo:string)=>Promise<void>}
 export async function createIntegrationService(store:DocumentStore,dataDir:string,deps:IntegrationDependencies={}) {
  const github=deps.github||githubCLI();const fetchPage=deps.fetchPage||fetchPublicPage;
  await mkdir(dataDir,{recursive:true,mode:0o700});const registryPath=join(dataDir,'github-sync.json');
@@ -182,7 +182,7 @@ export async function createIntegrationService(store:DocumentStore,dataDir:strin
   const exports=notes.flatMap(note=>{
    if(!/^[a-f0-9-]{36}$/.test(note.id))throw new AppError(400,'文档 ID 不适合导出。');
    const prefix=`${destination.folder}/${note.id}`;
-   return [{path:`${prefix}/README.md`,content:exportMarkdown(note)},{path:`${prefix}/document.json`,content:JSON.stringify({format:'yejian-document-v1',id:note.id,title:note.title,revision:note.revision,sourceUrl:note.sourceUrl,updatedAt:note.updatedAt,content:note.content},null,2)+'\n'},{path:`${prefix}/comments.json`,content:JSON.stringify({format:'yejian-discussions-v1',noteId:note.id,threads:note.threads},null,2)+'\n'}];
+   return [{path:`${prefix}/README.md`,content:exportMarkdown(note)},{path:`${prefix}/document.json`,content:JSON.stringify({format:'yejian-document-v1',id:note.id,title:note.title,revision:note.revision,sourceUrl:note.sourceUrl,updatedAt:note.updatedAt,content:note.content},null,2)+'\n'},{path:`${prefix}/comments.json`,content:JSON.stringify({format:'yejian-discussions-v1',noteId:note.id,threads:note.threads,documentMessages:note.documentMessages||[]},null,2)+'\n'}];
   });
   if(exports.reduce((sum,f)=>sum+Buffer.byteLength(f.content),0)>MAX_EXPORT)throw new AppError(413,'本次导出超过 8 MB，请减少文档数量。');
   const files:SyncFile[]=[];
@@ -207,6 +207,7 @@ export async function createIntegrationService(store:DocumentStore,dataDir:strin
    if(await ref(p.repo,p.branch)!==p.baseSha)throw new AppError(409,'GitHub 分支在预览后已有新提交，请重新预览。');
    const changes=p.files.filter(file=>file.status!=='unchanged');
    if(!changes.length){const registry=getRegistry();saveRegistry({destinations:{...registry.destinations,[key]:{files:tracked,notes:{...registry.destinations[key]?.notes,...Object.fromEntries(planned.noteIds.map(id=>[id,noteFingerprint(store.get(id))]))}}}});planned.result={repo:p.repo,branch:p.branch,commitSha:p.baseSha,url:`https://github.com/${p.repo}/tree/${encodeURIComponent(p.branch)}/${p.folder}`,files:0};return planned.result;}
+   await deps.beforePush?.(p.repo);
    const treeEntries=[];
    for(const file of changes){const blob=await github.request<{sha:string}>('POST',`repos/${p.repo}/git/blobs`,{content:file.content,encoding:'utf-8'});treeEntries.push({path:file.path,mode:'100644',type:'blob',sha:blob.sha});}
    const tree=await github.request<{sha:string}>('POST',`repos/${p.repo}/git/trees`,{base_tree:planned.treeSha,tree:treeEntries});

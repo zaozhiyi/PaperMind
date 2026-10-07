@@ -4,17 +4,18 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { mkdir, readFile, writeFile, unlink, open } from 'node:fs/promises';
+import { syncCommand } from './sync.mjs';
 import { notesCommand } from './notes.mjs';
 import { serviceNetworkEnv } from './network.mjs';
 const args=process.argv.slice(2);
 if(args.includes('--help')||args.includes('-h')){
-  console.log('PaperMind\n\n用法: papermind notes list | get ID | import file.md [--id ID --revision N]\n      papermind [--background] [--port 4317] [--no-open]\n      papermind --status | --stop\n\n--background 在后台持续运行；关闭终端和聊天后仍可访问。\n默认前台运行，Ctrl+C停止。STUDY_DATA_DIR可指定数据目录。');process.exit(0);
+  console.log('PaperMind\n\n用法: papermind notes list | get ID | import file.md [--id ID --revision N]\n      papermind sync setup owner/repo | status | now | pause\n      papermind [--background] [--port 4317] [--no-open]\n      papermind --status | --stop\n\n--background 在后台持续运行；关闭终端和聊天后仍可访问。\n默认前台运行，Ctrl+C停止。STUDY_DATA_DIR可指定数据目录。');process.exit(0);
 }
 const i=args.indexOf('--port');const port=i>=0?Number(args[i+1]):Number(process.env.PORT||4317);
 if(!Number.isInteger(port)||port<1024||port>65535){console.error('端口应为1024至65535之间的整数。');process.exit(1);}
 const root=join(dirname(fileURLToPath(import.meta.url)),'..'),dataDir=process.env.STUDY_DATA_DIR||join(homedir(),'.local','share','study-workbench');
 const pidFile=join(dataDir,`service-${port}.json`),url=`http://127.0.0.1:${port}`;
-if(args[0]==='notes'){try{await notesCommand(args,url);}catch(e){console.error(e.message==='fetch failed'?'PaperMind未运行，请先启动 papermind --background。':e.message);process.exitCode=1;}process.exit(process.exitCode||0);}
+if(['notes','sync'].includes(args[0])){try{await (args[0]==='notes'?notesCommand:syncCommand)(args,url);}catch(e){console.error(e.message==='fetch failed'?'PaperMind未运行，请先启动 papermind --background。':e.message);process.exitCode=1;}process.exit(process.exitCode||0);}
 const health=async()=>{try{const r=await fetch(`${url}/api/health`,{signal:AbortSignal.timeout(1500)});if(!r.ok)return null;const j=await r.json();return ['papermind','yejian'].includes(j.app)?j:null;}catch{return null;}};
 const openBrowser=()=>{if(args.includes('--no-open')||process.env.STUDY_NO_OPEN==='1')return;const cmd=process.platform==='darwin'?'open':process.platform==='win32'?'explorer':'xdg-open';const p=spawn(cmd,[url],{stdio:'ignore',detached:true});p.on('error',()=>{});p.unref();};
 if(args.includes('--status')){const h=await health();console.log(h?`PaperMind运行中：${url}`:'PaperMind未运行。');process.exit(h?0:1);}
