@@ -1,0 +1,22 @@
+// Explicit isolated browser acceptance fixture; never loads the user's data or credentials.
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createServer} from 'node:http';
+import express from 'express';
+import {DocumentStore,fromHTML,validateContent} from '../server/documents.ts';
+import {createIntegrationService} from '../server/integrations.ts';
+import {createApp} from '../server/app.ts';
+import {FakeGithub} from './helpers/github.ts';
+const dir=await mkdtemp(join(tmpdir(),'yejian-v5-browser-fixture-')),github=new FakeGithub();
+const a=new DocumentStore(join(dir,'a'),false),sa=await createIntegrationService(a,join(dir,'a'),{github});
+let n=a.create('同步验收（模拟 GitHub）',fromHTML('<h2>检索笔记</h2><p>这一句有讨论，需要在另一台电脑保留。</p>'));
+let start=0;validateContent(n.content).descendants((node,pos)=>{if(node.isText&&node.text!.startsWith('这一句'))start=pos;});
+const t=a.addThread(n.id,n.revision,start,start+5,'这一句有讨');a.addMessage(n.id,t.threadId,'user','这条讨论要随笔记同步。');
+await sa.push((await sa.syncPreview({repo:'owner/repo',noteIds:[n.id]})).previewId);
+const {app,store:b}=await createApp(join(dir,'b'),{integrations:{github}});const sb=await createIntegrationService(b,join(dir,'b'),{github});await sb.pull((await sb.pullPreview({repo:'owner/repo',folder:'learning-notes'})).previewId);
+n=b.get(n.id);b.save(n.id,n.revision,'同步验收 · 本机离线修改',n.content);b.addMessage(n.id,n.threads[0].id,'assistant','本机新增的解释，需要保留。');
+n=a.get(n.id);a.save(n.id,n.revision,'同步验收 · 远端新版本',n.content);await sa.push((await sa.syncPreview({repo:'owner/repo',noteIds:[n.id]})).previewId);
+app.use(express.static(join(process.cwd(),'dist')));app.get('/{*path}',(_req,res)=>res.sendFile(join(process.cwd(),'dist/index.html')));
+const server=createServer(app);server.listen(4318,'127.0.0.1',()=>console.log(JSON.stringify({fixture:true,url:`http://127.0.0.1:4318/?note=${n.id}`})));
+for(const sig of ['SIGINT','SIGTERM'])process.on(sig,()=>server.close(async()=>{a.close();b.close();await rm(dir,{recursive:true,force:true});process.exit(0);}));

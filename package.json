@@ -1,0 +1,58 @@
+{
+  "name": "papermind",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server/index.ts",
+    "build": "tsc --noEmit && vite build",
+    "start": "tsx server/index.ts",
+    "test": "tsx --test tests/*.test.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "^1.0.3",
+    "@earendil-works/pi-ai": "^1.0.3",
+    "@tiptap/core": "^3.31.4",
+    "@tiptap/extension-code-block": "^3.31.4",
+    "@tiptap/extension-highlight": "^3.20.0",
+    "@tiptap/extension-image": "^3.20.0",
+    "@tiptap/extension-placeholder": "^3.20.0",
+    "@tiptap/extension-table": "^3.20.0",
+    "@tiptap/html": "^3.20.0",
+    "@tiptap/pm": "^3.20.0",
+    "@tiptap/react": "^3.20.0",
+    "@tiptap/starter-kit": "^3.20.0",
+    "express": "^5.1.0",
+    "linkedom": "^0.18.13",
+    "lucide-react": "^0.468.0",
+    "marked": "^18.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "sanitize-html": "^2.17.0",
+    "tsx": "^4.20.0",
+    "typebox": "^1.3.27",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/sanitize-html": "^2.16.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0"
+  },
+  "bin": {
+    "papermind": "bin/papermind.mjs",
+    "yejian": "bin/yejian.mjs"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "description": "A local-first reading and annotation workspace for thinking with AI."
+}
