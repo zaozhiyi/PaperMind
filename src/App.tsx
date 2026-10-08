@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, isValidElement } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import Placeholder from '@tiptap/extension-placeholder';
 import ReactMarkdown from 'react-markdown';
@@ -9,6 +9,7 @@ import { ThemeSettings, useAppearance } from './ThemeSettings';
 import { DocumentLibrary, ArticleOutline, ArticleComments } from './ReaderNavigation';
 import { FloatingPanel } from './FloatingPanel';
 import { Integrations } from './Integrations';
+import { Diagram, RenderedCodeBlock } from './diagrams';
 import { editorExtensions } from '../shared/editor';
 import type { AIStatus, Note, NoteSummary, Proposal, Message } from '../shared/types';
 
@@ -17,7 +18,7 @@ type ChatSummary = { id: string; title: string; updatedAt: string };
 type Chat = ChatSummary & { documentId?: string; messages: Message[]; noteIds: string[] };
 type Login = { id: string; url?: string; status: string; prompt?: string; error?: string };
 function AssistantText({ text }: { text: string }) {
-  return <div className="assistant-markdown"><ReactMarkdown skipHtml remarkPlugins={[remarkGfm]} components={{ a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer noopener">{children}</a>, img: ({ alt }) => <span className="markdown-image-description">[图片：{alt || '未提供说明'}]</span> }}>{text}</ReactMarkdown></div>;
+  return <div className="assistant-markdown"><ReactMarkdown skipHtml remarkPlugins={[remarkGfm]} components={{ pre: ({ children }) => isValidElement<{className?:string}>(children) && children.props.className === 'language-mermaid' ? <>{children}</> : <pre>{children}</pre>, code: ({children, className}) => className === 'language-mermaid' ? <Diagram source={String(children).trimEnd()} /> : <code className={className}>{children}</code>, a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer noopener">{children}</a>, img: ({ alt }) => <span className="markdown-image-description">[图片：{alt || '未提供说明'}]</span> }}>{text}</ReactMarkdown></div>;
 }
 export function App() {
   const [sidebar,setSidebar]=useState(()=>window.innerWidth>850),[commentsOpen,setCommentsOpen]=useState(false);
@@ -47,7 +48,7 @@ export function App() {
   const refreshHeadings = (ed: any) => { const items: {text: string; pos: number; level: number}[] = []; ed.state.doc.descendants((node: any, pos: number) => { if (node.type.name === 'heading') items.push({ text: node.textContent, pos, level: node.attrs.level }); }); setHeadings(items); };
   const markDirty = () => { dirty.current = true; changes.current++; setSaveState('unsaved'); if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => flushRef.current().catch(() => {}), 700); };
   const editor = useEditor({
-    extensions: [...editorExtensions(), Placeholder.configure({ placeholder: '从一个问题开始，也可以直接写下你的想法…' })],
+    extensions: [...editorExtensions(RenderedCodeBlock), Placeholder.configure({ placeholder: '从一个问题开始，也可以直接写下你的想法…' })],
     content: { type: 'doc', content: [{ type: 'paragraph' }] },
     editorProps: { attributes: { 'aria-label': '文档正文', class: 'document-editor' }, handleClick: (_view, _pos, event) => { const el = (event.target as HTMLElement).closest('[data-thread-ids]'); if (el) { const id = el.getAttribute('data-thread-ids')?.split(' ')[0]; if (id) openThread.current(id); } return false; } },
     onUpdate: ({ editor: ed }) => { markDirty(); refreshHeadings(ed); },

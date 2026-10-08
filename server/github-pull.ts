@@ -1,3 +1,4 @@
+import { validateDiagrams } from './diagrams.ts';
 import { randomUUID } from 'node:crypto';
 import type { GithubClient, Registry } from './integrations.ts';
 import { AppError, DocumentStore, preserveDiscussionAnchors, toHTML } from './documents.ts';
@@ -34,6 +35,7 @@ export function createPullService(store:DocumentStore,github:GithubClient,option
     n={...n,title:parsed.title,content:preserveDiscussionAnchors(n,parsed.content)};
     warnings.push('README 正文有外部编辑：本次采用 Markdown 正文，尽量重新定位原有讨论；Markdown 不包含的排版可能变化。');
    }
+   await validateDiagrams(n.content);
    const old=local(n.id);locals[n.id]=old?JSON.stringify(old):null;
    const unchanged=['README.md','document.json','comments.json'].every(name=>files[`${prefix}/${name}`]===tracked?.files[`${prefix}/${name}`]);
    const status:PullItem['status']=!old?'add':noteFingerprint(old)===noteFingerprint(n)?'unchanged':unchanged?'local':tracked?.notes?.[n.id]===noteFingerprint(old)?'update':'conflict';

@@ -6,6 +6,8 @@
 
 本地运行。React + Tiptap 开源编辑器，Node.js + SQLite 保存文档和讨论，Pi 模型连接与 Agent 核心驱动独立的文档 Harness。主运行路径不依赖 Codex CLI 或 App Server。
 
+0.5.0 新增正文关系图：Markdown 中的 Mermaid `flowchart` / `graph` 导入后直接绘制，图稿折叠保存，可编辑、撤销，支持适应宽度和原始大小。图随正文与私有知识库同步保留，不需要公网图床。语法错误拒绝导入，页面绘制失败明确显示错误；导入结果中的校验通过与实际页面显示是两个状态。格式与交付约定见 [交付协议](docs/AGENT-HANDOFF.md#正文关系图050-起)。
+
 ## 运行
 
 需要 Node.js 24 或以上。
@@ -23,6 +25,8 @@ node bin/papermind.mjs --background
 需要命令行快捷入口时，在项目目录运行 `npm link`，以后使用 `papermind` 启动。
 
 开发模式：`STUDY_DEV=1 npm run dev`。没有构建产物时也会启用 Vite；有构建产物时默认运行已构建版本。
+
+从旧版升级：更新代码后运行 `npm ci`、`npm run build`，再停止并重启原服务。沿用原来的端口与 `STUDY_DATA_DIR`，文档留在原数据库中。仅拉取代码不会替换正在运行的旧进程；`/api/health` 返回运行版本。旧笔记只有表格时，需要生成并导入图稿，升级不会自动猜出关系图。
 
 ## 模型连接
 

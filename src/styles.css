@@ -75,3 +75,16 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
 .brand>span{white-space:nowrap}
 .brand>.icon-button{margin-left:auto;flex-shrink:0}
 [data-theme=dark] .brand-mark{filter:invert(1)}
+
+/* Diagrams stay in the document; source editing is an explicit disclosure. */
+.diagram-block{margin:24px 0;border:1px solid var(--border,#ddd);border-radius:10px;overflow:hidden;background:var(--paper,#fff)}
+.diagram-preview{overflow:auto;padding:20px;background:#fff;color:#292d33;min-height:72px}
+.diagram-preview svg{display:block;max-width:100%;margin:auto;height:auto}
+.diagram-preview[data-zoom="original"]{max-height:720px}
+.diagram-preview[data-zoom="original"] svg{max-width:none}
+.diagram-zoom{display:block;position:sticky;left:0;margin:0 0 10px auto;padding:4px 8px;border:1px solid #ddd;border-radius:5px;background:#fff;color:#555;font-size:12px;cursor:pointer}
+.diagram-preview[data-diagram-state="error"]{color:#a22b32;background:#fff3f2;font-size:14px}
+.diagram-block details{border-top:1px solid var(--border,#ddd)}
+.diagram-block summary{padding:8px 16px;font-size:12px;cursor:pointer;color:var(--muted,#777);user-select:none}
+.diagram-block pre{margin:0!important;border-radius:0!important}
+.assistant-markdown .diagram-preview{margin:12px 0;border-radius:8px;max-height:480px}

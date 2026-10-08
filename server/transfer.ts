@@ -1,3 +1,5 @@
+import { validateDiagrams } from './diagrams.ts';
+import { diagramSources } from '../shared/diagrams.ts';
 import type { Express } from 'express';
 import { marked } from 'marked';
 import { z } from 'zod';
@@ -31,9 +33,10 @@ export function noteFingerprint(note:Note):string {
 }
 export function installAgentRoutes(app:Express,store:DocumentStore) {
  store.db.exec('CREATE TABLE IF NOT EXISTS external_documents(source_key TEXT PRIMARY KEY,note_id TEXT NOT NULL REFERENCES notes(id),source_hash TEXT NOT NULL)');
- app.post('/api/agent/documents',(req,res)=>{
+ app.post('/api/agent/documents',async(req,res)=>{
   const input=z.object({body:z.string().min(1).max(500000),format:z.enum(['markdown','html']).default('markdown'),title:z.string().max(200).optional(),id:uuid.optional(),revision:z.number().int().positive().optional(),key:z.string().min(1).max(1000).optional()}).parse(req.body);
   const parsed=parseTextDocument(input.body,input.format,input.title),digest=createHash('sha256').update(JSON.stringify(parsed)).digest('hex');
+  const checkedDiagrams=await validateDiagrams(parsed.content);
   const result=store.tx(()=>{
    const record=input.key?store.db.prepare('SELECT note_id,source_hash FROM external_documents WHERE source_key=?').get(input.key) as {note_id:string;source_hash:string}|undefined:undefined;
    if(record&&input.id&&record.note_id!==input.id)throw new AppError(409,'这个交付标识已关联另一篇文档。');
@@ -45,6 +48,8 @@ export function installAgentRoutes(app:Express,store:DocumentStore) {
    }
    const note=store.create(parsed.title,parsed.content);if(input.key)store.db.prepare('INSERT INTO external_documents VALUES(?,?,?)').run(input.key,note.id,digest);return {note,created:true,warnings:[]};
   });
-  res.status(result.created?201:200).json({...result,url:`/?note=${result.note.id}`});
+  // A retry can return a note the reader has edited since the original import.
+  const diagrams=JSON.stringify(diagramSources(result.note.content))===JSON.stringify(diagramSources(parsed.content))?checkedDiagrams:await validateDiagrams(result.note.content);
+  res.status(result.created?201:200).json({...result,diagrams,url:`/?note=${result.note.id}`});
  });
 }

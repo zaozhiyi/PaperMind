@@ -22,9 +22,9 @@ export const Annotation = Mark.create({
   parseHTML() { return [{ tag: 'span[data-thread-ids]' }]; },
   renderHTML({ HTMLAttributes }) { return ['span', mergeAttributes({class: 'annotation'}, HTMLAttributes), 0]; },
 });
-export const editorExtensions = () => [
+export const editorExtensions = (codeBlock = CodeBlock.extend({ marks: 'annotation' })) => [
   StarterKit.configure({ codeBlock: false, link: { openOnClick: false, autolink: true } }),
-  CodeBlock.extend({ marks: 'annotation' }),
+  codeBlock,
   Highlight.configure({ multicolor: true }), Annotation,
   Table.configure({ resizable: false }), TableRow, TableHeader, TableCell,
   Image.configure({ allowBase64: false }),

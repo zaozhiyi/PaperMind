@@ -25,7 +25,7 @@ export async function createApp(dataDir:string, dependencies: { ai?: AIService; 
     next();
   });
   app.get('/api/session',(_req,res)=>res.json({token:sessionToken}));
-  app.get('/api/health',(_req,res)=>res.json({ok:true,app:'papermind',version:'0.4.0',pid:process.pid}));
+  app.get('/api/health',(_req,res)=>res.json({ok:true,app:'papermind',version:'0.5.0',pid:process.pid}));
   app.get('/api/notes',(_req,res)=>res.json(store.list()));
   app.post('/api/notes',(req,res)=>{
     const {title}=z.object({title:z.string().max(200).default('未命名文档')}).parse(req.body);

@@ -12,7 +12,7 @@ export async function notesCommand(args,url){
   if(!['markdown','html'].includes(format))throw new Error('仅支持 markdown 或 html。');
   const revision=value('--revision');if(revision&&(!Number.isInteger(Number(revision))||Number(revision)<1))throw new Error('revision 必须为正整数。');
   const result=await request('/api/agent/documents',{body,format,title:value('--title'),id:value('--id'),revision:revision?Number(revision):undefined,key:value('--key')||(file==='-'?undefined:resolve(file))});
-  console.log(JSON.stringify({id:result.note.id,title:result.note.title,revision:result.note.revision,created:result.created,warnings:result.warnings,url:url+result.url},null,2));return;
+  console.log(JSON.stringify({id:result.note.id,title:result.note.title,revision:result.note.revision,created:result.created,warnings:result.warnings,diagrams:result.diagrams,url:url+result.url},null,2));return;
  }
  throw new Error('用法：papermind notes list | get ID | import file.md [--id ID --revision N]');
 }
